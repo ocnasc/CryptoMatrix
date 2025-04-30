@@ -7,10 +7,11 @@ import hmac
 import hashlib
 from hashlib import pbkdf2_hmac
 
+RED = "\033[31m"
+GREEN = "\033[32m"
 YELLOW = "\033[33m"
 BLUE = "\033[34m"
 PURPLE = "\033[35m"
-RED = "\033[31m"
 RESET = "\033[0m"
 
 # CSPRNG ( não determinístico)
@@ -26,6 +27,19 @@ PBKDF2_ITERATIONS = 100_000
 KEY_LEN = 64  # bytes para permitir divisão em duas chaves
 SALT_LEN = 16  # bytes
 
+def random_size(length: int) -> tuple[int, int]:
+    token = secrets.token_bytes(length)
+    seed = int.from_bytes(token, 'big')
+
+    random_obj = random.Random(seed)
+
+    i,j = 0,0
+
+    while i*j < len(BASE_ALPHABET):
+        i,j = random_obj.randint(1,9), random_obj.randint(1,9) # código quebrando com linha/coluna > 9
+    
+    return i,j
+
 # Usa duas chaves separadas (32 bytes cada) para matrix_seed e para mac_key
 def derive_keys(passphrase: str, salt_bytes: bytes) -> tuple[bytes, bytes]:
     full_key = pbkdf2_hmac(PBKDF2_HASH, passphrase.encode(), salt_bytes, PBKDF2_ITERATIONS, dklen=KEY_LEN)
@@ -40,14 +54,14 @@ def clear_terminal():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 # Usa PRNG com seed derivada
-def generate_matrix(matrix_seed: bytes, size=7):
+def generate_matrix(matrix_seed: bytes, size: tuple[int, int]):
     seed_int = int.from_bytes(matrix_seed, 'big')
     local_rng = random.Random(seed_int)
 
     matrix_list = BASE_ALPHABET.copy()
-    while len(matrix_list) < size * size:
+    while len(matrix_list) < size[0] * size[1]:
         matrix_list += BASE_ALPHABET.copy()
-    matrix_list = matrix_list[: size * size]
+    matrix_list = matrix_list[: size[0] * size[1]]
 
     local_rng.shuffle(matrix_list)
 
@@ -60,7 +74,7 @@ def generate_matrix(matrix_seed: bytes, size=7):
         for sym, pos in zip(missing, dup_pos):
             matrix_list[pos] = sym
 
-    return [matrix_list[i*size:(i+1)*size] for i in range(size)]
+    return [matrix_list[i * size[1]:(i + 1) * size[1]] for i in range(size[0])]
 
 
 def print_matrix(matrix):
@@ -108,12 +122,15 @@ def main():
     salt_bytes = secrets.token_bytes(SALT_LEN)
     matrix_seed, mac_key = derive_keys(user_passphrase, salt_bytes)
 
-    matrix = generate_matrix(matrix_seed)
+    matrix_size: tuple = random_size(SALT_LEN)
+
+    matrix = generate_matrix(matrix_seed, matrix_size)
     while True:
         clear_terminal()
         print(f"{YELLOW}{'='*10} ATENÇÃO {'='*9}")
         print(f"{BLUE}Permitido: A–Z | Ç | espaço")
         print(f"{YELLOW}{'='*28}")
+        print(f"\n{GREEN}Matrix Size: {matrix_size[0]} X {matrix_size[1]}\n")
         print_matrix(matrix)
         msg = input(f"\n{YELLOW}Mensagem: {RESET}").strip().upper()
         if validate_message(msg): break
